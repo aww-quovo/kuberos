@@ -317,6 +317,13 @@ func Template(cfg *api.Config) http.HandlerFunc {
 		r.ParseMultipartForm(templateFormParseMemory) //nolint:errcheck
 		p := &extractor.OIDCAuthenticationParams{}
 
+		// Invalidate request if it is missing Authentication.
+		code := r.FormValue(urlParamCode)
+		if code == "" {
+			http.Error(w, ErrMissingCode.Error(), http.StatusBadRequest)
+			return
+		}
+
 		// TODO(negz): Return an error if any required parameter is absent.
 		if err := decoder.Decode(p, r.Form); err != nil {
 			http.Error(w, errors.Wrap(err, "cannot parse URL parameter").Error(), http.StatusBadRequest)
