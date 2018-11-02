@@ -105,7 +105,7 @@ export default {
       return (
         "# Add your user to kubectl\n" +
         'kubectl config set-credentials "' +
-        this.kubecfg.email +
+        this.kubecfg.email + '-' + this.kubecfg.suffix +
         '" \\\n' +
         "  --auth-provider=oidc \\\n" +
         '  --auth-provider-arg=client-id="' +
@@ -127,7 +127,7 @@ export default {
         "export CLUSTER=coolcluster\n" +
         "export CONTEXT=coolcontext\n" +
         'kubectl config set-context ${CONTEXT} --cluster ${CLUSTER} --user="' +
-        this.kubecfg.email +
+        this.kubecfg.email + '-' + this.kubecfg.suffix +
         '"'
       );
     }

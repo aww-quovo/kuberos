@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -85,7 +86,9 @@ func main() {
 	e, err := extractor.NewOIDC(provider.Verifier(&oidc.Config{ClientID: *clientID}), extractor.Logger(log), extractor.EmailDomain(*emailDomain))
 	kingpin.FatalIfError(err, "cannot setup OIDC extractor")
 
-	h, err := kuberos.NewHandlers(cfg, e, kuberos.Logger(log))
+	randomID := randomString()
+
+	h, err := kuberos.NewHandlers(cfg, e, randomID, kuberos.Logger(log))
 	kingpin.FatalIfError(err, "cannot setup HTTP handlers")
 
 	tmpl, err := clientcmd.LoadFromFile(*templateFile)
@@ -118,7 +121,7 @@ func main() {
 	r.HandlerFunc("GET", "/ui", content(index, filepath.Base(indexPath)))
 	r.HandlerFunc("GET", "/", h.Login)
 	r.HandlerFunc("GET", "/kubecfg", h.KubeCfg)
-	r.HandlerFunc("GET", "/kubecfg.yaml", kuberos.Template(tmpl))
+	r.HandlerFunc("GET", "/kubecfg.yaml", kuberos.Template(tmpl, randomID))
 	r.HandlerFunc("GET", "/healthz", ping())
 
 	if *shutdownEndpoint != "" {
@@ -128,6 +131,16 @@ func main() {
 	log.Info("shutdown", zap.Error(s.ListenAndServe()))
 	<-done
 	cancel()
+}
+
+func randomString() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, 4)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
 }
 
 func content(c io.ReadSeeker, filename string) http.HandlerFunc {

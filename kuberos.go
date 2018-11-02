@@ -142,6 +142,7 @@ type Handlers struct {
 	state      StateFn
 	httpClient *http.Client
 	endpoint   *url.URL
+	suffix     string
 }
 
 // An Option represents a Handlers option.
@@ -180,7 +181,7 @@ func Logger(l *zap.Logger) Option {
 }
 
 // NewHandlers returns a new set of Kuberos HTTP handlers.
-func NewHandlers(c *oauth2.Config, e extractor.OIDC, ho ...Option) (*Handlers, error) {
+func NewHandlers(c *oauth2.Config, e extractor.OIDC, randomID string, ho ...Option) (*Handlers, error) {
 	l, err := zap.NewProduction()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create default logger")
@@ -194,6 +195,7 @@ func NewHandlers(c *oauth2.Config, e extractor.OIDC, ho ...Option) (*Handlers, e
 		state:      defaultStateFn([]byte(c.ClientSecret)),
 		httpClient: http.DefaultClient,
 		endpoint:   &url.URL{Path: DefaultKubeCfgEndpoint},
+		suffix:     randomID,
 	}
 
 	// Assume we're using a Googley request for offline access.
@@ -260,7 +262,7 @@ func (h *Handlers) KubeCfg(w http.ResponseWriter, r *http.Request) {
 		RedirectURL:  redirectURL(r, h.endpoint),
 	}
 
-	rsp, err := h.e.Process(r.Context(), c, code)
+	rsp, err := h.e.Process(r.Context(), c, code, h.suffix)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "cannot process OAuth2 code").Error(), http.StatusForbidden)
 		return
@@ -312,7 +314,7 @@ func redirectURL(r *http.Request, endpoint *url.URL) string {
 // Template returns an HTTP handler that returns a new kubecfg by taking a
 // template with existing clusters and adding a user and context for each based
 // on the URL parameters passed to it.
-func Template(cfg *api.Config) http.HandlerFunc {
+func Template(cfg *api.Config, suffix string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.ParseMultipartForm(templateFormParseMemory) //nolint:errcheck
 		p := &extractor.OIDCAuthenticationParams{}
@@ -322,6 +324,7 @@ func Template(cfg *api.Config) http.HandlerFunc {
 			http.Error(w, errors.Wrap(err, "cannot parse URL parameter").Error(), http.StatusBadRequest)
 			return
 		}
+		p.Suffix = suffix
 
 		y, err := clientcmd.Write(populateUser(cfg, p))
 		if err != nil {
@@ -343,7 +346,7 @@ func populateUser(cfg *api.Config, p *extractor.OIDCAuthenticationParams) api.Co
 	c.Clusters = make(map[string]*api.Cluster)
 	c.Contexts = make(map[string]*api.Context)
 	c.CurrentContext = cfg.CurrentContext
-	c.AuthInfos[p.Username] = &api.AuthInfo{
+	c.AuthInfos[fmt.Sprintf("%s-%s", p.Username, p.Suffix)] = &api.AuthInfo{
 		AuthProvider: &api.AuthProviderConfig{
 			Name: templateAuthProvider,
 			Config: map[string]string{
@@ -373,7 +376,7 @@ func populateUser(cfg *api.Config, p *extractor.OIDCAuthenticationParams) api.Co
 		c.Clusters[name] = cluster
 		c.Contexts[name] = &api.Context{
 			Cluster:  name,
-			AuthInfo: p.Username,
+			AuthInfo: fmt.Sprintf("%s-%s", p.Username, p.Suffix),
 		}
 	}
 	return c

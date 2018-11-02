@@ -26,12 +26,13 @@ type OIDCAuthenticationParams struct {
 	IDToken      string `json:"idToken" schema:"idToken"`
 	RefreshToken string `json:"refreshToken" schema:"refreshToken"`
 	IssuerURL    string `json:"issuer" schema:"issuer"`
+	Suffix       string `json:"suffix" schema:"suffix"`
 }
 
 // An OIDC extractor performs OIDC validation, extracting and storing the
 // information required for Kubernetes authentication along the way.
 type OIDC interface {
-	Process(ctx context.Context, cfg *oauth2.Config, code string) (*OIDCAuthenticationParams, error)
+	Process(ctx context.Context, cfg *oauth2.Config, code, suffix string) (*OIDCAuthenticationParams, error)
 }
 
 type oidcExtractor struct {
@@ -85,7 +86,7 @@ func NewOIDC(v *oidc.IDTokenVerifier, oo ...Option) (OIDC, error) {
 	return oe, nil
 }
 
-func (o *oidcExtractor) Process(ctx context.Context, cfg *oauth2.Config, code string) (*OIDCAuthenticationParams, error) {
+func (o *oidcExtractor) Process(ctx context.Context, cfg *oauth2.Config, code, suffix string) (*OIDCAuthenticationParams, error) {
 	o.log.Debug("exchange ", zap.String("code", code))
 	octx := oidc.ClientContext(ctx, o.h)
 	token, err := cfg.Exchange(octx, code)
@@ -110,6 +111,7 @@ func (o *oidcExtractor) Process(ctx context.Context, cfg *oauth2.Config, code st
 		IDToken:      id,
 		RefreshToken: token.RefreshToken,
 		IssuerURL:    idt.Issuer,
+		Suffix:       suffix,
 	}
 	if err := idt.Claims(params); err != nil {
 		return nil, errors.Wrap(err, "cannot extract claims from ID token")
